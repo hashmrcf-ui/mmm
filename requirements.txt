@@ -1,4 +1,5 @@
 pandas>=2.0
 numpy>=1.24
 ccxt>=4.0
+yfinance>=0.2.40
 pytest>=7.0

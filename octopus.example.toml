@@ -1,0 +1,98 @@
+# 🐙 Octopus configuration — copy to octopus.toml and edit.
+
+mode = "paper"            # "paper" = simulated money (default). "live" = REAL orders, fully autonomous.
+starting_equity = 1000    # paper mode only (live mode reads your exchange balance)
+poll_seconds = 20         # how often the brain wakes up
+state_dir = "state"       # positions, journal, research results, logs
+
+[live]                    # used only when mode = "live"
+exchange = "binance"      # any ccxt exchange id: binance, bybit, okx, kraken, alpaca (US stocks) ...
+market_type = "spot"      # "spot" = long only | "future" = long + short
+quote = "USDT"
+
+[risk]
+risk_per_trade = 0.005            # 0.5% of equity lost if a trade hits its initial stop
+max_open_positions = 5
+max_per_asset_class = 3
+max_same_direction_per_class = 2  # e.g. max 2 crypto longs together (they move together)
+max_position_notional = 0.3
+max_gross_exposure = 1.0          # 1.0 = no leverage
+daily_loss_limit = 0.02           # no new trades today after -2%
+max_drawdown = 0.12               # KILL SWITCH: close everything and stop at -12% from peak
+loss_streak_pause = 3             # pause 24h after 3 losses in a row
+pause_hours = 24
+min_notional = 10.0
+
+[manage]
+breakeven_r = 1.0         # after +1R the stop moves to entry: the trade can no longer lose
+partial_r = 1.0           # ...and half the position is banked at +1R
+partial_fraction = 0.5
+trail_after_r = 1.5       # after +1.5R an ATR trailing stop follows the price
+trail_atr = 2.5
+max_bars = 72
+fee_rate = 0.001
+slippage = 0.0005
+
+[research]
+history_bars = 5000
+folds = 5
+min_trades = 30           # the scientist needs >= 30 out-of-sample trades as evidence
+min_profit_factor = 1.2
+min_expectancy_r = 0.05
+min_t_stat = 2.5          # statistical significance required
+min_p_positive = 0.97
+refresh_hours = 24        # re-validate everything daily; arms that lose their edge are dropped
+
+[notify]
+telegram = false          # true + env TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID for phone alerts
+
+# ---------------- Universe: every market the octopus watches ----------------
+# Crypto (ccxt) — tradable in paper and live mode
+[[markets]]
+symbol = "BTC/USDT"
+exchange = "binance"
+asset_class = "crypto"
+timeframe = "1h"
+
+[[markets]]
+symbol = "ETH/USDT"
+exchange = "binance"
+asset_class = "crypto"
+timeframe = "1h"
+
+[[markets]]
+symbol = "SOL/USDT"
+exchange = "binance"
+asset_class = "crypto"
+timeframe = "1h"
+
+[[markets]]
+symbol = "BNB/USDT"
+exchange = "binance"
+asset_class = "crypto"
+timeframe = "1h"
+
+# Stocks / forex / gold (Yahoo Finance data) — paper mode, or live through a ccxt broker such as alpaca
+[[markets]]
+symbol = "SPY"
+source = "yfinance"
+asset_class = "stocks"
+timeframe = "1h"
+
+[[markets]]
+symbol = "NVDA"
+source = "yfinance"
+asset_class = "stocks"
+timeframe = "1h"
+
+[[markets]]
+symbol = "EURUSD=X"
+source = "yfinance"
+asset_class = "forex"
+timeframe = "1h"
+
+[[markets]]
+symbol = "GC=F"
+source = "yfinance"
+asset_class = "commodities"
+timeframe = "1h"
