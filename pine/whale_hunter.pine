@@ -1,0 +1,70 @@
+//@version=5
+strategy("Whale Hunter - Liquidity Sweep + Whale Volume", overlay=true, initial_capital=1000,
+     commission_type=strategy.commission.percent, commission_value=0.1, pyramiding=0)
+
+// ---------- Inputs ----------
+lookback   = input.int(20, "Liquidity pool lookback")
+wickRatio  = input.float(0.5, "Min sweep wick / range", step=0.05)
+volWin     = input.int(50, "Volume window")
+volZThr    = input.float(2.0, "Whale volume z-score", step=0.1)
+brLong     = input.float(0.55, "Buy pressure for long", step=0.01)
+brShort    = input.float(0.45, "Buy pressure for short", step=0.01)
+useTrend   = input.bool(true, "Use EMA trend filter")
+trendLen   = input.int(200, "Trend EMA")
+atrLen     = input.int(14, "ATR period")
+stopBuf    = input.float(0.25, "Stop buffer (ATR)", step=0.05)
+rr         = input.float(2.0, "Reward : Risk", step=0.1)
+riskPct    = input.float(1.0, "Risk per trade %", step=0.1) / 100
+maxBars    = input.int(48, "Time stop (bars)")
+allowShort = input.bool(true, "Allow shorts")
+
+// ---------- Liquidity pools (where stops cluster) ----------
+poolHigh = ta.highest(high, lookback)[1]
+poolLow  = ta.lowest(low, lookback)[1]
+
+// ---------- Whale footprint ----------
+volMean  = ta.sma(volume, volWin)[1]
+volStd   = ta.stdev(volume, volWin)[1]
+volZ     = volStd > 0 ? (volume - volMean) / volStd : 0.0
+rng      = high - low
+buyRatio = rng > 0 ? (close - low) / rng : 0.5   // candle-based buy pressure proxy
+whaleVol = volZ >= volZThr
+
+// ---------- Sweep candles ----------
+lowerWick = rng > 0 ? (math.min(open, close) - low) / rng : 0.0
+upperWick = rng > 0 ? (high - math.max(open, close)) / rng : 0.0
+trend     = ta.ema(close, trendLen)
+atrV      = ta.atr(atrLen)
+
+longSig  = low < poolLow and close > poolLow and lowerWick >= wickRatio and whaleVol and buyRatio >= brLong and (not useTrend or close > trend)
+shortSig = allowShort and high > poolHigh and close < poolHigh and upperWick >= wickRatio and whaleVol and buyRatio <= brShort and (not useTrend or close < trend)
+
+// ---------- Orders ----------
+if longSig and strategy.position_size == 0
+    stopL = low - stopBuf * atrV
+    risk  = close - stopL
+    if risk > 0
+        qty = math.min(strategy.equity * riskPct / risk, strategy.equity / close)
+        strategy.entry("Long", strategy.long, qty=qty)
+        strategy.exit("Long X", "Long", stop=stopL, limit=close + rr * risk)
+
+if shortSig and strategy.position_size == 0
+    stopS = high + stopBuf * atrV
+    risk  = stopS - close
+    if risk > 0
+        qty = math.min(strategy.equity * riskPct / risk, strategy.equity / close)
+        strategy.entry("Short", strategy.short, qty=qty)
+        strategy.exit("Short X", "Short", stop=stopS, limit=close - rr * risk)
+
+if strategy.opentrades > 0 and bar_index - strategy.opentrades.entry_bar_index(0) >= maxBars
+    strategy.close_all(comment="Time stop")
+
+// ---------- Visuals & alerts ----------
+plot(poolHigh, "Liquidity high", color=color.new(color.red, 40), style=plot.style_stepline)
+plot(poolLow, "Liquidity low", color=color.new(color.green, 40), style=plot.style_stepline)
+plot(useTrend ? trend : na, "Trend EMA", color=color.new(color.gray, 20))
+plotshape(longSig, "Bull hunt", shape.triangleup, location.belowbar, color.green, size=size.small)
+plotshape(shortSig, "Bear hunt", shape.triangledown, location.abovebar, color.red, size=size.small)
+barcolor(whaleVol ? color.new(color.orange, 0) : na, title="Whale volume bar")
+alertcondition(longSig, "Whale Hunter LONG", "Bullish stop hunt + whale buying on {{ticker}}")
+alertcondition(shortSig, "Whale Hunter SHORT", "Bearish stop hunt + whale selling on {{ticker}}")
